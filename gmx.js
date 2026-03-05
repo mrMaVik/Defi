@@ -1,69 +1,123 @@
-/**
- * ═══════════════════════════════════════════════════════════════════════════════
- * 🏪 GMX.GS v2.4 — ✅ 73.6359 GM ($118.91) | TVL $57.76M
- * ═══════════════════════════════════════════════════════════════════════════════
- */
+// ========== GMX v4.4 — МИНИМАЛИЗИРОВАННЫЙ ==========
+const RPC_URL = 'https://arb1.arbitrum.io/rpc';
 
-function testGMX() {
-  try {
-    console.log('🧪 === GMX v2.4 ТВОИ 73.6359 GM ===');
-    
-    const WALLET = '0x60452b15dc656b37a2bbb6dcb02c2bce9cb29353';
-    const GM_TOKEN = '0x70d95587d40a2caf56bd97485ab3eec10bee6336'; // GM (ex-GLP)
-    
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = ss.getSheetByName('GMX') || ss.insertSheet('GMX');
-    sheet.getRange('A:G').clearContent();
-    
-    // 🔥 1. ARBISCAN GM BALANCE (твои 73.6359)
-    console.log('📡 1/4 ARBISCAN GM BALANCE...');
-    const balanceUrl = `https://api.arbiscan.io/api?module=account&action=tokenbalance&contractaddress=${GM_TOKEN}&address=${WALLET}&tag=latest&apikey=YourApiKeyToken`;
-    const balanceResponse = UrlFetchApp.fetch(balanceUrl, { muteHttpExceptions: true });
-    const balanceData = JSON.parse(balanceResponse.getContentText());
-    
-    const gmRaw = balanceData.status === '1' ? parseInt(balanceData.result || 0) : 0;
-    const gmBalance = gmRaw / 1e6; // 6 decimals = ТВОИ 73.6359!
-    
-    // 🔥 2. DEXSCREENER GM PRICE ($1.615)
-    console.log('📡 2/4 GM PRICE...');
-    const priceResponse = UrlFetchApp.fetch(`https://api.dexscreener.com/latest/dex/tokens/${GM_TOKEN}`);
-    const priceData = JSON.parse(priceResponse.getContentText());
-    const gmPrice = priceData.pairs?.[0]?.priceUsd || 1.615; // ТВОЯ цена!
-    const gmUsd = gmBalance * gmPrice;
-    
-    // 🔥 3. GMX APP DATA (TVL $57.76M)
-    console.log('📡 3/4 GMX STATS...');
-    const tvl = 57760000; // $57.76M из app.gmx.io
-    const gmPercent = (gmUsd / tvl * 100).toFixed(4);
-    
-    // 🔥 4. FEESTATS (твои $23.93)
-    const totalFees = 23.93; // Твои заработанные fees
-    
-    // 🔥 ОСНОВНАЯ ТАБЛИЦА (точно как app.gmx.io!)
-    sheet.getRange('A1:G2').setValues([
-      ['GM Balance', gmBalance.toFixed(4), `$${gmUsd.toFixed(2)}`, gmPrice, WALLET, GM_TOKEN, `${gmPercent}% TVL`],
-      ['TVL Supply', '35.77M GM', '$57.76M', '-', 'Total Earned Fees', `$${totalFees}`, '✅ LIVE']
-    ]);
-    
-    // 🔥 ФОРМАТИРОВАНИЕ (зеленый = профит!)
-    sheet.getRange('A1:G1').setFontWeight('bold').setBackground('#4285f4').setFontColor('white');
-    sheet.getRange('A2:G2').setFontWeight('bold').setBackground('#34a853').setFontColor('white');
-    sheet.getRange('B1').setBackground(gmBalance > 0 ? '#34a853' : '#ea4335');
-    sheet.getRange('C1').setBackground(gmUsd > 100 ? '#34a853' : '#fbbc04');
-    sheet.autoResizeColumns(1, 7);
-    
-    // 🔥 АЛЕРТ УСЛОВИЯ (будущие триггеры)
-    const alertStatus = gmUsd < 100 ? '🚨 НИЗКИЙ!' : 
-                       gmUsd > 200 ? '💰 ХОРОШО!' : '✅ OK';
-    
-    sheet.getRange('A4').setValue('Alert Status');
-    sheet.getRange('B4').setValue(alertStatus);
-    
-    console.log(`🎉 ТВОИ GM: ${gmBalance.toFixed(4)} | $${gmUsd.toFixed(0)}`);
-    console.log(`📊 TVL: $${tvl/1e6}M | Fees: $${totalFees}`);
-    console.log(`📈 Твоя доля: ${gmPercent}% от TVL`);
-    
-  } catch(e) {
-    console.error('💥 testGMX v2.4 ERROR:', e.toString());
+function gmxMonitor() {
+  console.time('GMX v4.4');
+  const config = getConfig();
+  if (!config?.WALLET) return console.error('❌ WALLET не найден!');
+  
+  const wallet = config.WALLET.toLowerCase();
+  console.log('👛 WALLET:', wallet.slice(0, 5) + '...' + wallet.slice(-5));
+  
+  // 🔥 GraphQL — 1 запрос
+  const data = JSON.parse(UrlFetchApp.fetch('https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    payload: JSON.stringify({
+      query: `{
+        marketInfos(limit: 10, orderBy: poolValueMax_DESC) {
+          marketTokenAddress poolValue marketTokenSupply
+        }
+      }`
+    }),
+    muteHttpExceptions: true
+  }).getContentText()).data.marketInfos;
+  
+  if (!data?.length) {
+    console.error('❌ Нет пулов!');
+    updateSheet([], wallet);
+    return;
   }
+  
+  console.log(`✅ Пулов: ${data.length}`);
+  
+  // 🔥 RPC + ФИЛЬТР в 1 цикле
+  const positions = [];
+  data.forEach((market, i) => {
+    const token = market.marketTokenAddress;
+    if (!token) return;
+    
+    console.log(`\n📡 ${i+1}/10: ${token.slice(-8)}`);
+    
+    try {
+      // decimals
+      const decimalsHex = JSON.parse(UrlFetchApp.fetch(RPC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        payload: JSON.stringify({
+          jsonrpc: "2.0", method: "eth_call",
+          params: [{to: token.toLowerCase(), data: '0x313ce567'}, "latest"],
+          id: 1
+        }),
+        muteHttpExceptions: true
+      }).getContentText()).result || '0x0';
+      const decimals = parseInt(decimalsHex, 16);
+      
+      // balance
+      const paddedWallet = '000000000000000000000000' + wallet.slice(2);
+      const balanceHex = JSON.parse(UrlFetchApp.fetch(RPC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        payload: JSON.stringify({
+          jsonrpc: "2.0", method: "eth_call",
+          params: [{to: token.toLowerCase(), data: '0x70a08231' + paddedWallet}, "latest"],
+          id: 1
+        }),
+        muteHttpExceptions: true
+      }).getContentText()).result || '0x0';
+      
+      const balance = +(parseInt(balanceHex, 16) / Math.pow(10, decimals)).toFixed(6);
+      console.log(`💰 ${balance}`);
+      
+      if (balance > 0) {
+        positions.push({
+          token: token.slice(0, 5) + '...' + token.slice(-5),
+          balance: balance.toFixed(6),
+          poolUSD: (parseFloat(market.poolValue || 0) / 1e30).toLocaleString(),
+          supply: (parseFloat(market.marketTokenSupply || 0) / 1e18).toLocaleString()
+        });
+        console.log(`✅ 🎉 ПОЗИЦИЯ: ${balance}`);
+      }
+    } catch (e) {
+      console.error(`❌ RPC Error: ${e.message}`);
+    }
+    
+    Utilities.sleep(200);
+  });
+  
+  updateSheet(positions, wallet);
+  console.log(`🎉 Позиций: ${positions.length}`);
+  console.timeEnd('GMX v4.4');
+}
+
+function updateSheet(positions, wallet) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('GMX POSITIONS') || ss.insertSheet('GMX POSITIONS');
+  sheet.clear();
+  
+  // Заголовки
+  sheet.getRange(1, 1, 1, 4).setValues([['#', 'Token', 'Balance', 'Pool$/Supply']]);
+  sheet.getRange('A1:D1').setFontWeight('bold').setBackground('#4285f4').setFontColor('white');
+  
+  if (!positions.length) {
+    sheet.getRange(2, 1, 1, 4).setValues([['⭕ ПОЗИЦИЙ НЕ НАЙДЕНО', '', '', '']])
+      .setFontWeight('bold').setBackground('#ea4335').setFontColor('white');
+    return;
+  }
+  
+  // Статистика + позиции
+  const total = positions.reduce((sum, p) => sum + parseFloat(p.balance), 0);
+  const rows = [[new Date().toLocaleString('ru-RU'), positions.length, wallet.slice(0, 5) + '...' + wallet.slice(-5), total.toFixed(6)],
+                ...positions.map((p, i) => [i+1, p.token, p.balance, `${p.poolUSD}/${p.supply}`])];
+  
+  sheet.getRange(2, 1, rows.length, 4).setValues(rows);
+  sheet.getRange('A2:D2').setFontWeight('bold').setBackground('#34a853').setFontColor('white');
+  sheet.getRange(3, 1, positions.length, 4).setBackground('#fbbc04').setFontWeight('bold');
+  
+  [50, 150, 100, 200].forEach((w, i) => sheet.setColumnWidth(i + 1, w));
+}
+
+function testGMX() { 
+  clearConfigCache?.();
+  gmxMonitor(); 
 }

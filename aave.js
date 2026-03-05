@@ -9,7 +9,7 @@ const Aave = {
   getConfig() {
     const config = getConfig();
     return {
-      WALLET: config.AAVE_WALLET || ''.toLowerCase(),
+      WALLET: config.WALLET || ''.toLowerCase(),
       HF_ALERT: parseFloat(config.HF_ALERT) || 30.0,
       HF_YELLOW: parseFloat(config.HF_YELLOW) || 30.0,
       HF_RED: parseFloat(config.HF_RED) || 28.0,
