@@ -32,7 +32,7 @@ function getConfigFromSheet() {
     TAX_RATE: parseFloat(settingsSheet.getRange('B6').getValue()) || 0,
     
     // 🪙 AAVE (B9-B13) ⭐ НОВОЕ!
-    AAVE_WALLET: settingsSheet.getRange('B9').getValue()?.toString().trim() || '',
+    WALLET: settingsSheet.getRange('B9').getValue()?.toString().trim() || '',
     HF_ALERT: parseFloat(settingsSheet.getRange('B10').getValue()) || 30.0,
     HF_YELLOW: parseFloat(settingsSheet.getRange('B11').getValue()) || 30.0,
     HF_RED: parseFloat(settingsSheet.getRange('B12').getValue()) || 28.0,
@@ -55,15 +55,15 @@ function getConfigFromSheet() {
   }
   
   // ⚠️ ПРОВЕРКА AAVE WALLET (B9) ⭐ НОВОЕ!
-  if (!config.AAVE_WALLET || config.AAVE_WALLET.length < 40) {
-    console.warn('⚠️ Настройки!B9: AAVE WALLET пустой!\nИспользуется дефолтный кошелёк.');
+  if (!config.WALLET || config.WALLET.length < 40) {
+    console.warn('⚠️ Настройки!B9: WALLET пустой!\nИспользуется дефолтный кошелёк.');
   }
   
   console.log('⚙️ Config v2.2 загружен:', {
     DAYS_AHEAD: config.DAYS_AHEAD,
     TRIGGER_HOUR: config.TRIGGER_HOUR,
     TAX_RATE: config.TAX_RATE,
-    AAVE_WALLET: config.AAVE_WALLET.substring(0, 10) + '...', // Частично
+    WALLET: config.WALLET.substring(0, 10) + '...', // Частично
     HF_ALERT: config.HF_ALERT,
     HF_DROP: config.HF_DROP
   });
